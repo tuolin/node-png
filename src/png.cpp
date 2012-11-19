@@ -70,7 +70,7 @@ Png::New(const Arguments &args)
         {
             return VException("Fourth argument must be 'rgb', 'bgr', 'rgba' or 'bgra'.");
         }
-        
+
         if (str_eq(*bts, "rgb"))
             buf_type = BUF_RGB;
         else if (str_eq(*bts, "bgr"))
@@ -110,7 +110,7 @@ Png::PngEncodeSync(const Arguments &args)
 }
 
 void
-Png::EIO_PngEncode(eio_req *req)
+Png::EIO_PngEncode(uv_work_t *req)
 {
     encode_request *enc_req = (encode_request *)req->data;
     Png *png = (Png *)enc_req->png_obj;
@@ -133,12 +133,12 @@ Png::EIO_PngEncode(eio_req *req)
     }
 }
 
-int 
-Png::EIO_PngEncodeAfter(eio_req *req)
+void
+Png::EIO_PngEncodeAfter(uv_work_t *req)
 {
     HandleScope scope;
 
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref((uv_handle_t*) req);
     encode_request *enc_req = (encode_request *)req->data;
 
     Handle<Value> argv[2];
@@ -168,7 +168,7 @@ Png::EIO_PngEncodeAfter(eio_req *req)
     ((Png *)enc_req->png_obj)->Unref();
     free(enc_req);
 
-    return 0;
+    // return 0;
 }
 
 Handle<Value>
@@ -201,9 +201,12 @@ Png::PngEncodeAsync(const Arguments &args)
 
     enc_req->buf_data = BufferData(buf_val->ToObject());
 
-    eio_custom(EIO_PngEncode, EIO_PRI_DEFAULT, EIO_PngEncodeAfter, enc_req);
-
-    ev_ref(EV_DEFAULT_UC);
+    // eio_custom(EIO_PngEncode, EIO_PRI_DEFAULT, EIO_PngEncodeAfter, enc_req);
+    // ev_ref(EV_DEFAULT_UC);
+    uv_work_t *req = new uv_work_t;
+    req->data = enc_req;
+    uv_queue_work(uv_default_loop(), req, EIO_PngEncode, EIO_PngEncodeAfter);
+    uv_ref((uv_handle_t*)&req);
     png->Ref();
 
     return Undefined();

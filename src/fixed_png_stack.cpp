@@ -22,7 +22,7 @@ FixedPngStack::Initialize(Handle<Object> target)
 
 FixedPngStack::FixedPngStack(int wwidth, int hheight, buffer_type bbuf_type) :
     width(wwidth), height(hheight), buf_type(bbuf_type)
-{ 
+{
     data = (unsigned char *)malloc(sizeof(*data) * width * height * 4);
     if (!data) throw "malloc failed in node-png (FixedPngStack ctor)";
     memset(data, 0xFF, width*height*4);
@@ -147,13 +147,13 @@ FixedPngStack::Push(const Arguments &args)
         return VException("Width smaller than 0.");
     if (h < 0)
         return VException("Height smaller than 0.");
-    if (x >= png_stack->width) 
+    if (x >= png_stack->width)
         return VException("Coordinate x exceeds FixedPngStack's dimensions.");
-    if (y >= png_stack->height) 
+    if (y >= png_stack->height)
         return VException("Coordinate y exceeds FixedPngStack's dimensions.");
-    if (x+w > png_stack->width) 
+    if (x+w > png_stack->width)
         return VException("Pushed PNG exceeds FixedPngStack's width.");
-    if (y+h > png_stack->height) 
+    if (y+h > png_stack->height)
         return VException("Pushed PNG exceeds FixedPngStack's height.");
 
     char *buf_data = BufferData(args[0]->ToObject());
@@ -173,7 +173,7 @@ FixedPngStack::PngEncodeSync(const Arguments &args)
 }
 
 void
-FixedPngStack::EIO_PngEncode(eio_req *req)
+FixedPngStack::EIO_PngEncode(uv_work_t *req)
 {
     encode_request *enc_req = (encode_request *)req->data;
     FixedPngStack *png = (FixedPngStack *)enc_req->png_obj;
@@ -196,12 +196,12 @@ FixedPngStack::EIO_PngEncode(eio_req *req)
     }
 }
 
-int 
-FixedPngStack::EIO_PngEncodeAfter(eio_req *req)
+void
+FixedPngStack::EIO_PngEncodeAfter(uv_work_t *req)
 {
     HandleScope scope;
 
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref((uv_handle_t*) req);
     encode_request *enc_req = (encode_request *)req->data;
 
     Handle<Value> argv[2];
@@ -230,8 +230,8 @@ FixedPngStack::EIO_PngEncodeAfter(eio_req *req)
 
     ((FixedPngStack *)enc_req->png_obj)->Unref();
     free(enc_req);
- 
-    return 0;
+
+    // return 0;
 }
 
 Handle<Value>
@@ -258,9 +258,12 @@ FixedPngStack::PngEncodeAsync(const Arguments &args)
     enc_req->png_len = 0;
     enc_req->error = NULL;
 
-    eio_custom(EIO_PngEncode, EIO_PRI_DEFAULT, EIO_PngEncodeAfter, enc_req);
-
-    ev_ref(EV_DEFAULT_UC);
+    // eio_custom(EIO_PngEncode, EIO_PRI_DEFAULT, EIO_PngEncodeAfter, enc_req);
+    // ev_ref(EV_DEFAULT_UC);
+    uv_work_t *req = new uv_work_t;
+    req->data = enc_req;
+    uv_queue_work(uv_default_loop(), req, EIO_PngEncode, EIO_PngEncodeAfter);
+    uv_ref((uv_handle_t*)&req);
     png->Ref();
 
     return Undefined();
